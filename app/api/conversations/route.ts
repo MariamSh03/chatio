@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { CreateUserDto, UpdateUserDto } from '@/lib/types/entities'
+import { CreateConversationDto, UpdateConversationDto } from '@/lib/types/entities'
 import { corsHeaders } from '@/lib/cors'
 
 // Handle OPTIONS (preflight) requests
@@ -8,65 +8,48 @@ export async function OPTIONS() {
   return new NextResponse(null, { headers: corsHeaders })
 }
 
-// GET /api/users - Get all users or filter by query params
+// GET /api/conversations
 export async function GET(request: Request) {
-  console.log('📥 [USERS API] GET request received')
   try {
-    console.log('🔌 [USERS API] Creating admin client...')
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    const username = searchParams.get('username')
-    const email = searchParams.get('email')
-    
-    console.log('🔍 [USERS API] Query parameters:', { id, username, email })
+    const type = searchParams.get('type')
 
     if (id) {
-      console.log(`🔍 [USERS API] Fetching user with ID: ${id}`)
       const { data, error } = await supabase
-        .from('users')
+        .from('conversations')
         .select('*')
         .eq('id', id)
         .single()
 
       if (error) {
-        console.error('❌ [USERS API] Error fetching user:', error.message)
         return NextResponse.json(
-          { message: 'User not found', error: error.message },
+          { message: 'Conversation not found', error: error.message },
           { status: 404, headers: corsHeaders }
         )
       }
 
-      console.log('✅ [USERS API] User found:', { id: data?.id, username: data?.username })
       return NextResponse.json({ data }, { headers: corsHeaders })
     }
 
-    // Get all users or filter
-    let query = supabase.from('users').select('*')
+    let query = supabase.from('conversations').select('*')
 
-    if (username) {
-      query = query.eq('username', username)
+    if (type && (type === 'channel' || type === 'person')) {
+      query = query.eq('type', type)
     }
 
-    if (email) {
-      query = query.eq('email', email)
-    }
-
-    console.log('📊 [USERS API] Executing query...')
     const { data, error, count } = await query.order('created_at', { ascending: false })
 
     if (error) {
-      console.error('❌ [USERS API] Query error:', error.message)
       return NextResponse.json(
-        { message: 'Error fetching users', error: error.message },
+        { message: 'Error fetching conversations', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
-    console.log(`✅ [USERS API] Successfully fetched ${data?.length || 0} users`)
     return NextResponse.json({ data: data || [], count: count || data?.length || 0 }, { headers: corsHeaders })
   } catch (error: any) {
-    console.error('❌ [USERS API] Server error:', error.message)
     return NextResponse.json(
       { message: 'Server error', error: error.message },
       { status: 500, headers: corsHeaders }
@@ -74,50 +57,35 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/users - Create a new user
+// POST /api/conversations
 export async function POST(request: Request) {
-  console.log('📥 [USERS API] POST request received')
   try {
-    let body: CreateUserDto
-    
-    try {
-      body = await request.json()
-      console.log('📋 [USERS API] Request body received:', { 
-        username: body.username, 
-        email: body.email,
-        display_name: body.display_name
-      })
-    } catch (error) {
-      console.error('❌ [USERS API] Invalid JSON:', error)
-      return NextResponse.json(
-        { message: 'Invalid JSON in request body' },
-        { status: 400 }
-      )
-    }
+    const body: CreateConversationDto = await request.json()
 
-    // Validate required fields
-    if (!body.username || !body.email || !body.display_name) {
-      console.warn('⚠️ [USERS API] Missing required fields')
+    if (!body.name || !body.type) {
       return NextResponse.json(
-        { message: 'Missing required fields: username, email, and display_name are required' },
+        { message: 'Missing required fields: name and type are required' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    // Generate unique UUID for the user
-    const userId = crypto.randomUUID()
-    console.log('🆔 [USERS API] Generated user ID:', userId)
+    if (body.type !== 'channel' && body.type !== 'person') {
+      return NextResponse.json(
+        { message: 'Invalid type: must be "channel" or "person"' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
 
+    const conversationId = crypto.randomUUID()
     const supabaseAdmin = getSupabaseAdmin()
-    console.log('💾 [USERS API] Inserting user into database...')
+
     const { data, error } = await supabaseAdmin
-      .from('users')
+      .from('conversations')
       .insert([
         {
-          id: userId,
-          username: body.username,
-          email: body.email,
-          display_name: body.display_name,
+          id: conversationId,
+          name: body.name,
+          type: body.type,
           avatar_url: body.avatar_url || null,
         },
       ])
@@ -125,20 +93,17 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
-      console.error('❌ [USERS API] Error creating user:', error.message)
       return NextResponse.json(
-        { message: 'Error creating user', error: error.message },
+        { message: 'Error creating conversation', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
-    console.log('✅ [USERS API] User created successfully:', { id: data?.id, username: data?.username })
     return NextResponse.json(
-      { message: 'User created successfully', data },
+      { message: 'Conversation created successfully', data },
       { status: 201, headers: corsHeaders }
     )
   } catch (error: any) {
-    console.error('❌ [USERS API] Server error:', error.message)
     return NextResponse.json(
       { message: 'Server error', error: error.message },
       { status: 500, headers: corsHeaders }
@@ -146,31 +111,29 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/users - Update a user
+// PUT /api/conversations
 export async function PUT(request: Request) {
   try {
-    let body: UpdateUserDto & { id: string }
-    
-    try {
-      body = await request.json()
-    } catch (error) {
-      return NextResponse.json(
-        { message: 'Invalid JSON in request body' },
-        { status: 400 }
-      )
-    }
+    const body: UpdateConversationDto & { id: string } = await request.json()
 
     if (!body.id) {
       return NextResponse.json(
-        { message: 'User id is required' },
+        { message: 'Conversation id is required' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    const updateData: UpdateUserDto = {}
-    if (body.username !== undefined) updateData.username = body.username
-    if (body.email !== undefined) updateData.email = body.email
-    if (body.display_name !== undefined) updateData.display_name = body.display_name
+    const updateData: UpdateConversationDto = {}
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.type !== undefined) {
+      if (body.type !== 'channel' && body.type !== 'person') {
+        return NextResponse.json(
+          { message: 'Invalid type: must be "channel" or "person"' },
+          { status: 400 }
+        )
+      }
+      updateData.type = body.type
+    }
     if (body.avatar_url !== undefined) updateData.avatar_url = body.avatar_url
 
     if (Object.keys(updateData).length === 0) {
@@ -182,7 +145,7 @@ export async function PUT(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
-      .from('users')
+      .from('conversations')
       .update(updateData)
       .eq('id', body.id)
       .select()
@@ -190,20 +153,20 @@ export async function PUT(request: Request) {
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error updating user', error: error.message },
+        { message: 'Error updating conversation', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
     if (!data) {
       return NextResponse.json(
-        { message: 'User not found' },
+        { message: 'Conversation not found' },
         { status: 404, headers: corsHeaders }
       )
     }
 
     return NextResponse.json(
-      { message: 'User updated successfully', data },
+      { message: 'Conversation updated successfully', data },
       { status: 200, headers: corsHeaders }
     )
   } catch (error: any) {
@@ -214,7 +177,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE /api/users?id=xxx - Delete a user
+// DELETE /api/conversations?id=xxx
 export async function DELETE(request: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
@@ -223,25 +186,25 @@ export async function DELETE(request: Request) {
 
     if (!id) {
       return NextResponse.json(
-        { message: 'User id is required as query parameter' },
+        { message: 'Conversation id is required as query parameter' },
         { status: 400, headers: corsHeaders }
       )
     }
 
     const { error } = await supabaseAdmin
-      .from('users')
+      .from('conversations')
       .delete()
       .eq('id', id)
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error deleting user', error: error.message },
+        { message: 'Error deleting conversation', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
     return NextResponse.json(
-      { message: 'User deleted successfully' },
+      { message: 'Conversation deleted successfully' },
       { status: 200, headers: corsHeaders }
     )
   } catch (error: any) {
@@ -251,3 +214,4 @@ export async function DELETE(request: Request) {
     )
   }
 }
+

@@ -1,46 +1,107 @@
 // User entity
 export interface User {
-  id: string | number
-  name: string
-  role: string
-  description?: string | null
+  id: string
+  username: string
+  email: string
+  display_name: string
+  avatar_url?: string | null
+  created_at?: string
 }
 
 export interface CreateUserDto {
-  name: string
-  role: string
-  description?: string | null
+  username: string
+  email: string
+  display_name: string
+  avatar_url?: string | null
 }
 
 export interface UpdateUserDto {
+  username?: string
+  email?: string
+  display_name?: string
+  avatar_url?: string | null
+}
+
+// Conversation entity
+export interface Conversation {
+  id: string
+  name: string
+  type: 'channel' | 'person'
+  avatar_url?: string | null
+  created_at?: string
+}
+
+export interface CreateConversationDto {
+  name: string
+  type: 'channel' | 'person'
+  avatar_url?: string | null
+}
+
+export interface UpdateConversationDto {
   name?: string
-  role?: string
-  description?: string | null
+  type?: 'channel' | 'person'
+  avatar_url?: string | null
 }
 
 // Message entity
 export interface Message {
-  id_message: string | number
-  id_chatnumb: string | number
-  id_user: string | number
-  message_date: string // ISO date string
+  id: string
+  conversation_id: string
+  author_id: string
   content: string
-  is_edited: boolean
+  is_ai: boolean
+  task_proposal?: any | null // JSONB
+  search_result?: any | null // JSONB
+  created_at?: string
 }
 
 export interface CreateMessageDto {
-  id_chatnumb: string | number
-  id_user: string | number
+  conversation_id: string
+  author_id: string
   content: string
-  message_date: string // Optional, will default to current date if not provided
-  is_edited?: boolean // Defaults to false
+  is_ai?: boolean
+  task_proposal?: any | null
+  search_result?: any | null
 }
 
 export interface UpdateMessageDto {
-  id_chatnumb?: string | number
-  id_user?: string | number
+  conversation_id?: string
+  author_id?: string
   content?: string
-  message_date?: string
-  is_edited?: boolean
+  is_ai?: boolean
+  task_proposal?: any | null
+  search_result?: any | null
 }
 
+// Task entity
+export interface Task {
+  id: string
+  message_id?: string | null
+  task_id?: string | null
+  action: 'create' | 'update' | 'comment'
+  summary: string
+  details?: string | null
+  status: 'pending' | 'confirmed' | 'rejected'
+  proposed_by: string
+  created_at?: string
+}
+
+export interface CreateTaskDto {
+  message_id?: string | null
+  task_id?: string | null
+  action: 'create' | 'update' | 'comment'
+  summary: string
+  details?: string | null
+  status?: 'pending' | 'confirmed' | 'rejected'
+  proposed_by: string
+}
+
+export interface UpdateTaskDto {
+  message_id?: string | null
+  task_id?: string | null
+  action?: 'create' | 'update' | 'comment'
+  summary?: string
+  details?: string | null
+  status?: 'pending' | 'confirmed' | 'rejected'
+  proposed_by?: string
+}

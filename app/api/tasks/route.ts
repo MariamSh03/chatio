@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { CreateMessageDto, UpdateMessageDto } from '@/lib/types/entities'
+import { CreateTaskDto, UpdateTaskDto } from '@/lib/types/entities'
 import { corsHeaders } from '@/lib/cors'
 
 // Handle OPTIONS (preflight) requests
@@ -8,25 +8,26 @@ export async function OPTIONS() {
   return new NextResponse(null, { headers: corsHeaders })
 }
 
-// GET /api/messages
+// GET /api/tasks
 export async function GET(request: Request) {
   try {
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    const conversation_id = searchParams.get('conversation_id')
-    const author_id = searchParams.get('author_id')
+    const status = searchParams.get('status')
+    const proposed_by = searchParams.get('proposed_by')
+    const message_id = searchParams.get('message_id')
 
     if (id) {
       const { data, error } = await supabase
-        .from('messages')
+        .from('tasks')
         .select('*')
         .eq('id', id)
         .single()
 
       if (error) {
         return NextResponse.json(
-          { message: 'Message not found', error: error.message },
+          { message: 'Task not found', error: error.message },
           { status: 404, headers: corsHeaders }
         )
       }
@@ -34,21 +35,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ data }, { headers: corsHeaders })
     }
 
-    let query = supabase.from('messages').select('*')
+    let query = supabase.from('tasks').select('*')
 
-    if (conversation_id) {
-      query = query.eq('conversation_id', conversation_id)
+    if (status && (status === 'pending' || status === 'confirmed' || status === 'rejected')) {
+      query = query.eq('status', status)
     }
 
-    if (author_id) {
-      query = query.eq('author_id', author_id)
+    if (proposed_by) {
+      query = query.eq('proposed_by', proposed_by)
+    }
+
+    if (message_id) {
+      query = query.eq('message_id', message_id)
     }
 
     const { data, error, count } = await query.order('created_at', { ascending: false })
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error fetching messages', error: error.message },
+        { message: 'Error fetching tasks', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
@@ -62,32 +67,47 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/messages
+// POST /api/tasks
 export async function POST(request: Request) {
   try {
-    const body: CreateMessageDto = await request.json()
+    const body: CreateTaskDto = await request.json()
 
-    if (!body.conversation_id || !body.author_id || !body.content) {
+    if (!body.action || !body.summary || !body.proposed_by) {
       return NextResponse.json(
-        { message: 'Missing required fields: conversation_id, author_id, and content are required' },
+        { message: 'Missing required fields: action, summary, and proposed_by are required' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    const messageId = crypto.randomUUID()
+    if (body.action !== 'create' && body.action !== 'update' && body.action !== 'comment') {
+      return NextResponse.json(
+        { message: 'Invalid action: must be "create", "update", or "comment"' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    if (body.status && body.status !== 'pending' && body.status !== 'confirmed' && body.status !== 'rejected') {
+      return NextResponse.json(
+        { message: 'Invalid status: must be "pending", "confirmed", or "rejected"' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    const taskId = crypto.randomUUID()
     const supabaseAdmin = getSupabaseAdmin()
 
     const { data, error } = await supabaseAdmin
-      .from('messages')
+      .from('tasks')
       .insert([
         {
-          id: messageId,
-          conversation_id: body.conversation_id,
-          author_id: body.author_id,
-          content: body.content,
-          is_ai: body.is_ai || false,
-          task_proposal: body.task_proposal || null,
-          search_result: body.search_result || null,
+          id: taskId,
+          message_id: body.message_id || null,
+          task_id: body.task_id || null,
+          action: body.action,
+          summary: body.summary,
+          details: body.details || null,
+          status: body.status || 'pending',
+          proposed_by: body.proposed_by,
         },
       ])
       .select()
@@ -95,13 +115,13 @@ export async function POST(request: Request) {
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error creating message', error: error.message },
+        { message: 'Error creating task', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
     return NextResponse.json(
-      { message: 'Message created successfully', data },
+      { message: 'Task created successfully', data },
       { status: 201, headers: corsHeaders }
     )
   } catch (error: any) {
@@ -112,25 +132,42 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/messages
+// PUT /api/tasks
 export async function PUT(request: Request) {
   try {
-    const body: UpdateMessageDto & { id: string } = await request.json()
+    const body: UpdateTaskDto & { id: string } = await request.json()
 
     if (!body.id) {
       return NextResponse.json(
-        { message: 'Message id is required' },
+        { message: 'Task id is required' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    const updateData: UpdateMessageDto = {}
-    if (body.conversation_id !== undefined) updateData.conversation_id = body.conversation_id
-    if (body.author_id !== undefined) updateData.author_id = body.author_id
-    if (body.content !== undefined) updateData.content = body.content
-    if (body.is_ai !== undefined) updateData.is_ai = body.is_ai
-    if (body.task_proposal !== undefined) updateData.task_proposal = body.task_proposal
-    if (body.search_result !== undefined) updateData.search_result = body.search_result
+    const updateData: UpdateTaskDto = {}
+    if (body.message_id !== undefined) updateData.message_id = body.message_id
+    if (body.task_id !== undefined) updateData.task_id = body.task_id
+    if (body.action !== undefined) {
+      if (body.action !== 'create' && body.action !== 'update' && body.action !== 'comment') {
+        return NextResponse.json(
+          { message: 'Invalid action: must be "create", "update", or "comment"' },
+          { status: 400 }
+        )
+      }
+      updateData.action = body.action
+    }
+    if (body.summary !== undefined) updateData.summary = body.summary
+    if (body.details !== undefined) updateData.details = body.details
+    if (body.status !== undefined) {
+      if (body.status !== 'pending' && body.status !== 'confirmed' && body.status !== 'rejected') {
+        return NextResponse.json(
+          { message: 'Invalid status: must be "pending", "confirmed", or "rejected"' },
+          { status: 400 }
+        )
+      }
+      updateData.status = body.status
+    }
+    if (body.proposed_by !== undefined) updateData.proposed_by = body.proposed_by
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -141,7 +178,7 @@ export async function PUT(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
-      .from('messages')
+      .from('tasks')
       .update(updateData)
       .eq('id', body.id)
       .select()
@@ -149,20 +186,20 @@ export async function PUT(request: Request) {
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error updating message', error: error.message },
+        { message: 'Error updating task', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
     if (!data) {
       return NextResponse.json(
-        { message: 'Message not found' },
+        { message: 'Task not found' },
         { status: 404, headers: corsHeaders }
       )
     }
 
     return NextResponse.json(
-      { message: 'Message updated successfully', data },
+      { message: 'Task updated successfully', data },
       { status: 200, headers: corsHeaders }
     )
   } catch (error: any) {
@@ -173,7 +210,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE /api/messages?id=xxx
+// DELETE /api/tasks?id=xxx
 export async function DELETE(request: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
@@ -182,25 +219,25 @@ export async function DELETE(request: Request) {
 
     if (!id) {
       return NextResponse.json(
-        { message: 'Message id is required as query parameter' },
+        { message: 'Task id is required as query parameter' },
         { status: 400, headers: corsHeaders }
       )
     }
 
     const { error } = await supabaseAdmin
-      .from('messages')
+      .from('tasks')
       .delete()
       .eq('id', id)
 
     if (error) {
       return NextResponse.json(
-        { message: 'Error deleting message', error: error.message },
+        { message: 'Error deleting task', error: error.message },
         { status: 500, headers: corsHeaders }
       )
     }
 
     return NextResponse.json(
-      { message: 'Message deleted successfully' },
+      { message: 'Task deleted successfully' },
       { status: 200, headers: corsHeaders }
     )
   } catch (error: any) {
@@ -210,3 +247,4 @@ export async function DELETE(request: Request) {
     )
   }
 }
+
