@@ -310,8 +310,6 @@ class ApiClient {
       similarity: number;
     }>;
     count: number;
-    summary?: string;
-    warning?: string;
   }> {
     return this.request('/api/search', {
       method: 'POST',

@@ -81,12 +81,12 @@ export function SearchDialog({ open, onOpenChange, onSearch, allMessages = [], c
       const searchResults = await api.searchMessages({
         query: query.trim(),
         limit: 10,
-        threshold: 0.4, // Default threshold for semantic search
+        threshold: 0.45, // Default threshold for semantic search
       });
 
       if (!searchResults.results || searchResults.results.length === 0) {
         setResults({
-          summary: searchResults.summary || `No semantically similar messages found for "${query}". Try rephrasing your search or using different keywords.`,
+          summary: `No semantically similar messages found for "${query}". Try rephrasing your search or using different keywords.`,
           references: [],
         });
         setIsSearching(false);
@@ -124,8 +124,7 @@ export function SearchDialog({ open, onOpenChange, onSearch, allMessages = [], c
         })
       );
 
-      // Use AI-generated summary if available, otherwise use default
-      const summary = searchResults.summary || `Found ${searchResults.count} semantically relevant message${searchResults.count > 1 ? 's' : ''} for "${query}". Results are ranked by relevance.`;
+      const summary = `Found ${searchResults.count} semantically relevant message${searchResults.count > 1 ? 's' : ''} for "${query}". Results are ranked by similarity.`;
 
       setResults({
         summary,

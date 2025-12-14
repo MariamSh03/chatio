@@ -13,7 +13,7 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { query, limit = 10, threshold = 0.4 } = body // Default threshold for semantic search
+    const { query, limit = 10, threshold = 0.45 } = body // Default threshold for semantic search
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(

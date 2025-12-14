@@ -772,7 +772,7 @@ export const getSwaggerSpec = () => {
           properties: {
             query: { type: 'string', example: 'What was decided about payment limits?', description: 'Search query text' },
             limit: { type: 'number', example: 10, default: 10, description: 'Maximum number of results to return' },
-            threshold: { type: 'number', example: 0.4, default: 0.4, description: 'Minimum similarity score (0-1) for results' },
+            threshold: { type: 'number', example: 0.45, default: 0.45, description: 'Minimum similarity score (0-1) for results' },
           },
           required: ['query'],
         },
